@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}CareConnect | Alerts{% endblock %}
+{% block page_title %}Alerts{% endblock %}
+{% block nav_alerts %}active{% endblock %}
+
+{% block content %}
+<div class="cc-card" style="margin-bottom:16px;">
+  <div class="cc-grid cc-grid-3">
+    <div class="cc-field">
+      <label class="cc-label">Alert Type</label>
+      <select class="cc-select" id="filterType" onchange="loadAlerts()">
+        <option value="">All types</option>
+        <option value="HIGH_TEMPERATURE">High Temperature</option>
+        <option value="EMERGENCY">Emergency Button</option>
+        <option value="DEVICE_OFFLINE">Device Offline</option>
+        <option value="NO_DATA">No Recent Data</option>
+      </select>
+    </div>
+    <div class="cc-field">
+      <label class="cc-label">Date</label>
+      <input class="cc-input" type="date" id="filterDate" onchange="loadAlerts()">
+    </div>
+    <div class="cc-field">
+      <label class="cc-label">&nbsp;</label>
+      <button class="cc-btn cc-btn-outline" style="width:100%;" onclick="clearFilters()">Clear Filters</button>
+    </div>
+  </div>
+</div>
+
+<div class="cc-card">
+  <div class="cc-section-title">Alert History</div>
+  <div id="alertsWrap" class="cc-loading">Loading alerts…</div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const doctorId = "{{ doctor_id }}";
+
+function severityBadge(sev) {
+  if (sev === 'CRITICAL') return '<span class="cc-badge cc-badge-danger">Critical</span>';
+  if (sev === 'WARNING') return '<span class="cc-badge cc-badge-warning">Warning</span>';
+  return '<span class="cc-badge cc-badge-info">Information</span>';
+}
+
+function clearFilters() {
+  document.getElementById('filterType').value = '';
+  document.getElementById('filterDate').value = '';
+  loadAlerts();
+}
+
+async function acknowledge(id) {
+  await fetch(ccApi(`/api/alerts/acknowledge/${id}/`), { method: 'POST' });
+  loadAlerts();
+}
+
+async function loadAlerts() {
+  const wrap = document.getElementById('alertsWrap');
+  const type = document.getElementById('filterType').value;
+  const date = document.getElementById('filterDate').value;
+
+  let url = `/api/alerts/${doctorId}/?`;
+  if (type) url += `type=${type}&`;
+  if (date) url += `date=${date}&`;
+
+  try {
+    const res = await fetch(ccApi(url));
+    const data = await res.json();
+
+    if (!data.length) {
+      wrap.className = 'cc-empty';
+      wrap.textContent = 'No alerts found for the selected filters.';
+      return;
+    }
+
+    let html = `<table class="cc-table"><thead><tr>
+      <th>Type</th><th>Patient</th><th>Value</th><th>Date</th><th>Time</th><th>Severity</th><th>Status</th><th></th>
+    </tr></thead><tbody>`;
+
+    data.forEach(a => {
+      html += `<tr>
+        <td>${a.type_display}</td>
+        <td>${a.patient_name}</td>
+        <td>${a.value || '-'}</td>
+        <td>${a.date}</td>
+        <td>${a.time}</td>
+        <td>${severityBadge(a.severity)}</td>
+        <td>${a.acknowledged ? '<span class="cc-badge cc-badge-muted">Acknowledged</span>' : '<span class="cc-badge cc-badge-danger">Open</span>'}</td>
+        <td>${a.acknowledged ? '' : `<button class="cc-btn cc-btn-outline cc-btn-sm" onclick="acknowledge(${a.id})">Acknowledge</button>`}</td>
+      </tr>`;
+    });
+
+    html += `</tbody></table>`;
+    wrap.className = '';
+    wrap.innerHTML = html;
+  } catch (e) {
+    wrap.className = 'cc-error';
+    wrap.textContent = 'Unable to connect to monitoring server.';
+  }
+}
+
+loadAlerts();
+setInterval(loadAlerts, {{ POLL_INTERVAL_MS|default:5000 }});
+</script>
+{% endblock %}

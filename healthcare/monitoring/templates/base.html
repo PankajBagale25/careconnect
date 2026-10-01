@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}CareConnect{% endblock %}</title>
+<link rel="stylesheet" href="/static/css/theme.css">
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<div class="cc-app">
+
+  <div class="cc-sidebar-backdrop" id="cc-sidebar-backdrop" onclick="ccToggleSidebar()"></div>
+
+  <aside class="cc-sidebar" id="cc-sidebar">
+    <div class="cc-logo">
+      <span class="cc-logo-dot">➕</span>
+      CareConnect
+    </div>
+    <nav class="cc-nav">
+      <a href="/doctor/?id={{ doctor_id }}" class="{% block nav_dashboard %}{% endblock %}">
+        <span class="cc-icon">📊</span> Dashboard
+      </a>
+      <a href="/doctor/?id={{ doctor_id }}" class="{% block nav_patients %}{% endblock %}">
+        <span class="cc-icon">🧑‍🤝‍🧑</span> Patients
+      </a>
+      <a href="/doctor/?id={{ doctor_id }}#monitoring" class="{% block nav_live %}{% endblock %}">
+        <span class="cc-icon">📡</span> Live Monitoring
+      </a>
+      <a href="/alerts/?id={{ doctor_id }}" class="{% block nav_alerts %}{% endblock %}">
+        <span class="cc-icon">🔔</span> Alerts
+      </a>
+      <a href="/reports/?id={{ doctor_id }}" class="{% block nav_reports %}{% endblock %}">
+        <span class="cc-icon">📄</span> Reports
+      </a>
+      <a href="/settings/?id={{ doctor_id }}" class="{% block nav_settings %}{% endblock %}">
+        <span class="cc-icon">⚙️</span> Settings
+      </a>
+    </nav>
+  </aside>
+
+  <div class="cc-main">
+    <header class="cc-topbar">
+      <div class="cc-topbar-left">
+        <button class="cc-hamburger" onclick="ccToggleSidebar()">☰</button>
+        <div class="cc-page-title">{% block page_title %}Dashboard{% endblock %}</div>
+      </div>
+      <div class="cc-topbar-right">
+        <button class="cc-icon-btn" onclick="ccToggleTheme()" title="Toggle dark mode">
+          <span id="cc-theme-icon">🌙</span>
+        </button>
+        <button class="cc-icon-btn" title="Notifications" onclick="window.location.href='/alerts/?id={{ doctor_id }}'">
+          🔔
+          {% block notif_badge %}{% endblock %}
+        </button>
+        <div class="cc-profile">
+          <div class="cc-avatar">DR</div>
+          <div>
+            <div class="cc-profile-name">Doctor</div>
+            <div class="cc-profile-role">Care Provider</div>
+          </div>
+        </div>
+        <button class="cc-btn cc-btn-outline cc-btn-sm" onclick="window.location.href='/logout/'">Logout</button>
+      </div>
+    </header>
+
+    <main class="cc-content">
+      {% block content %}{% endblock %}
+    </main>
+
+    <div class="cc-footer">Engineering Project Prototype | IoT Patient Monitoring</div>
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

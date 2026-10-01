@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CareConnect | Login</title>
+<link rel="stylesheet" href="/static/css/theme.css">
+<style>
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(160deg, #f0f9ff 0%, #f4f7fb 55%, #ecfeff 100%);
+    padding: 20px;
+  }
+  .cc-login-wrap {
+    width: 100%;
+    max-width: 400px;
+  }
+  .cc-login-card {
+    background: var(--cc-surface);
+    border: 1px solid var(--cc-border);
+    border-radius: 18px;
+    box-shadow: var(--cc-shadow-lg);
+    padding: 34px 30px 28px 30px;
+  }
+  .cc-login-logo {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    margin-bottom: 6px;
+  }
+  .cc-login-logo .dot {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--cc-primary), var(--cc-accent));
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 20px;
+  }
+  .cc-login-title { font-size: 21px; font-weight: 800; color: var(--cc-primary-dark); text-align: center; }
+  .cc-login-sub { text-align: center; color: var(--cc-text-muted); font-size: 13px; margin: 4px 0 24px 0; }
+
+  .cc-role-toggle {
+    display: flex; background: var(--cc-surface-alt); border-radius: 10px; padding: 4px;
+    margin-bottom: 20px; border: 1px solid var(--cc-border);
+  }
+  .cc-role-toggle button {
+    flex: 1; padding: 9px 0; border: none; background: transparent; border-radius: 8px;
+    font-weight: 600; font-size: 13.5px; color: var(--cc-text-muted); cursor: pointer;
+  }
+  .cc-role-toggle button.active {
+    background: var(--cc-surface); color: var(--cc-primary-dark);
+    box-shadow: var(--cc-shadow);
+  }
+
+  .cc-pw-field { position: relative; }
+  .cc-pw-toggle {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; color: var(--cc-text-muted); font-size: 13px;
+  }
+
+  .cc-remember-row {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px; color: var(--cc-text-muted); margin: -4px 0 18px 0;
+  }
+  .cc-remember-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+  .cc-login-btn { width: 100%; padding: 12px 0; font-size: 14.5px; }
+  .cc-login-error {
+    margin-top: 14px; padding: 10px 12px; border-radius: 9px;
+    background: var(--cc-danger-bg); color: var(--cc-danger); font-size: 13px; text-align: center;
+  }
+  .cc-login-footer { text-align: center; color: var(--cc-text-muted); font-size: 12px; margin-top: 22px; }
+  .cc-spinner {
+    width: 15px; height: 15px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.5); border-top-color: #fff;
+    animation: cc-spin 0.7s linear infinite; display: none;
+  }
+  @keyframes cc-spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="cc-login-wrap">
+  <div class="cc-login-card">
+    <div class="cc-login-logo">
+      <div class="dot">➕</div>
+    </div>
+    <div class="cc-login-title">CareConnect</div>
+    <div class="cc-login-sub">IoT Patient Health Monitoring Portal</div>
+
+    <div class="cc-role-toggle">
+      <button type="button" id="roleDoctorBtn" onclick="setRole('doctor')">Doctor</button>
+      <button type="button" id="rolePatientBtn" onclick="setRole('patient')">Patient</button>
+    </div>
+
+    <form method="POST" action="/login/" id="loginForm" onsubmit="return handleSubmit()">
+      {% csrf_token %}
+      <input type="hidden" name="role" id="role" value="doctor">
+
+      <div class="cc-field">
+        <label class="cc-label">Phone Number / Username</label>
+        <input class="cc-input" type="text" name="phone" placeholder="Enter phone number" required autocomplete="username">
+      </div>
+
+      <div class="cc-field" id="passwordBox">
+        <label class="cc-label">Password</label>
+        <div class="cc-pw-field">
+          <input class="cc-input" type="password" name="password" id="passwordInput" placeholder="Enter password" autocomplete="current-password">
+          <button type="button" class="cc-pw-toggle" onclick="togglePwVisibility()" id="pwToggleBtn">Show</button>
+        </div>
+      </div>
+
+      <div class="cc-remember-row">
+        <label><input type="checkbox" id="rememberMe"> Remember me</label>
+        <span class="cc-muted">Prototype credentials — no signup required</span>
+      </div>
+
+      <button type="submit" class="cc-btn cc-btn-primary cc-login-btn" id="loginBtn">
+        <span class="cc-spinner" id="loginSpinner"></span>
+        <span id="loginBtnText">Login</span>
+      </button>
+
+      {% if error %}
+        <div class="cc-login-error">{{ error }}</div>
+      {% endif %}
+    </form>
+
+    <div class="cc-login-footer">Engineering Project Prototype | IoT Patient Monitoring</div>
+  </div>
+</div>
+
+<script>
+function setRole(role) {
+  document.getElementById('role').value = role;
+  document.getElementById('roleDoctorBtn').classList.toggle('active', role === 'doctor');
+  document.getElementById('rolePatientBtn').classList.toggle('active', role === 'patient');
+  document.getElementById('passwordBox').style.display = (role === 'patient') ? 'none' : 'block';
+}
+
+function togglePwVisibility() {
+  const input = document.getElementById('passwordInput');
+  const btn = document.getElementById('pwToggleBtn');
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.textContent = show ? 'Hide' : 'Show';
+}
+
+function handleSubmit() {
+  document.getElementById('loginSpinner').style.display = 'inline-block';
+  document.getElementById('loginBtnText').textContent = 'Signing in…';
+  document.getElementById('loginBtn').disabled = true;
+  if (document.getElementById('rememberMe').checked) {
+    localStorage.setItem('cc-remembered-phone', document.querySelector('input[name=phone]').value);
+  }
+  return true;
+}
+
+// initial state
+setRole('{{ role|default:"doctor" }}');
+
+const remembered = localStorage.getItem('cc-remembered-phone');
+if (remembered) document.querySelector('input[name=phone]').value = remembered;
+</script>
+
+</body>
+</html>

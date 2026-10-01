@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}CareConnect | Reports{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block nav_reports %}active{% endblock %}
+{% block extra_head %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endblock %}
+
+{% block content %}
+<div class="cc-card" style="margin-bottom:16px;">
+  <div class="cc-grid cc-grid-3">
+    <div class="cc-field">
+      <label class="cc-label">Patient</label>
+      <select class="cc-select" id="filterPatient" onchange="loadReport()">
+        <option value="">All patients</option>
+      </select>
+    </div>
+    <div class="cc-field">
+      <label class="cc-label">From</label>
+      <input class="cc-input" type="date" id="filterFrom" onchange="loadReport()">
+    </div>
+    <div class="cc-field">
+      <label class="cc-label">To</label>
+      <input class="cc-input" type="date" id="filterTo" onchange="loadReport()">
+    </div>
+  </div>
+  <button class="cc-btn cc-btn-primary cc-btn-sm" onclick="exportReport()">⬇ Export Report</button>
+  <span class="cc-muted" style="font-size:12px; margin-left:8px;">CSV/PDF export UI ready — connect to your export endpoint when available.</span>
+</div>
+
+<div class="cc-grid cc-grid-4" style="margin-bottom:16px;">
+  <div class="cc-card cc-stat-card">
+    <div class="cc-stat-value" id="repHighTemp">--</div>
+    <div class="cc-stat-label">High-Temperature Events</div>
+  </div>
+  <div class="cc-card cc-stat-card">
+    <div class="cc-stat-value" id="repEmergency">--</div>
+    <div class="cc-stat-label">Emergency Events</div>
+  </div>
+  <div class="cc-card cc-stat-card">
+    <div class="cc-stat-value" id="repUptime">--</div>
+    <div class="cc-stat-label">Device Uptime</div>
+  </div>
+  <div class="cc-card cc-stat-card">
+    <div class="cc-stat-value" id="repReadings">--</div>
+    <div class="cc-stat-label">Total Sensor Readings</div>
+  </div>
+</div>
+
+<div class="cc-card">
+  <div class="cc-section-title">Temperature History</div>
+  <div class="cc-chart-wrap" style="height:280px; position:relative;"><canvas id="repChart"></canvas></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const doctorId = "{{ doctor_id }}";
+let repChart;
+
+async function loadPatientFilter() {
+  try {
+    const res = await fetch(ccApi(`/api/doctor-patients/${doctorId}/`));
+    const data = await res.json();
+    const select = document.getElementById('filterPatient');
+    data.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      select.appendChild(opt);
+    });
+  } catch (e) { /* keep "all patients" only */ }
+}
+
+async function loadReport() {
+  const patientId = document.getElementById('filterPatient').value;
+  const from = document.getElementById('filterFrom').value;
+  const to = document.getElementById('filterTo').value;
+
+  let url = `/api/reports/${doctorId}/?`;
+  if (patientId) url += `patient_id=${patientId}&`;
+  if (from) url += `from=${from}&`;
+  if (to) url += `to=${to}&`;
+
+  try {
+    const res = await fetch(ccApi(url));
+    const d = await res.json();
+
+    document.getElementById('repHighTemp').textContent = d.high_temperature_events;
+    document.getElementById('repEmergency').textContent = d.emergency_events;
+    document.getElementById('repUptime').textContent = d.device_uptime_percent + '%';
+    document.getElementById('repReadings').textContent = d.total_readings;
+
+    const labels = d.temperature_history.map(p => p.time);
+    const temps = d.temperature_history.map(p => p.temp);
+
+    if (repChart) repChart.destroy();
+    repChart = new Chart(document.getElementById('repChart'), {
+      type: 'line',
+      data: { labels, datasets: [{ label: 'Temperature (°C)', data: temps, borderColor: '#0e7490', backgroundColor: 'rgba(14,116,144,0.08)', fill: true, tension: 0.3, pointRadius: 2 }] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 34, max: 40 } } }
+    });
+  } catch (e) {
+    document.getElementById('repHighTemp').textContent = '-';
+  }
+}
+
+function exportReport() {
+  alert('Export is wired up to the UI only in this prototype. Connect this button to a CSV/PDF export endpoint on your Django REST API when ready.');
+}
+
+loadPatientFilter().then(loadReport);
+</script>
+{% endblock %}

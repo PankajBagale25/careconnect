@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CareConnect | Patient Monitoring</title>
+<link rel="stylesheet" href="/static/css/theme.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body { background: var(--cc-bg); }
+  .cc-mon-topbar {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 14px 22px; background: var(--cc-surface); border-bottom: 1px solid var(--cc-border);
+    position: sticky; top: 0; z-index: 20;
+  }
+  .cc-mon-id { display: flex; align-items: center; gap: 12px; }
+  .cc-mon-id .dot {
+    width: 38px; height: 38px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--cc-primary), var(--cc-accent));
+    color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .cc-live-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--cc-danger-bg); color: var(--cc-danger);
+    padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+  .cc-live-pill .blink {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--cc-danger);
+    animation: cc-blink 1.1s infinite;
+  }
+  @keyframes cc-blink { 50% { opacity: 0.25; } }
+
+  .cc-mon-content { max-width: 1200px; margin: 0 auto; padding: 22px 20px 60px 20px; }
+
+  .cc-emergency-banner {
+    display: none;
+    background: var(--cc-danger); color: #fff;
+    border-radius: 14px; padding: 18px 22px; margin-bottom: 18px;
+    align-items: center; gap: 16px;
+    box-shadow: 0 8px 24px rgba(220,38,38,0.35);
+  }
+  .cc-emergency-banner.show { display: flex; }
+  .cc-emergency-banner .icon { font-size: 30px; }
+  .cc-emergency-banner .title { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
+  .cc-emergency-banner .sub { font-size: 13px; opacity: 0.9; }
+
+  .cc-vital-card { text-align: left; }
+  .cc-vital-card.alert { border-color: var(--cc-danger); box-shadow: 0 0 0 3px var(--cc-danger-bg); }
+  .cc-vital-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .cc-vital-value { font-size: 34px; font-weight: 800; line-height: 1; }
+  .cc-vital-updated { font-size: 12px; color: var(--cc-text-muted); margin-top: 8px; }
+
+  .cc-axis-row { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+  .cc-axis { display: flex; align-items: center; gap: 10px; }
+  .cc-axis-label { width: 20px; font-weight: 700; color: var(--cc-text-muted); font-size: 13px; }
+  .cc-axis-bar-track { flex: 1; height: 8px; background: var(--cc-surface-alt); border-radius: 999px; overflow: hidden; }
+  .cc-axis-bar-fill { height: 100%; background: var(--cc-primary); border-radius: 999px; }
+  .cc-axis-value { width: 60px; text-align: right; font-size: 12.5px; color: var(--cc-text-muted); }
+
+  .cc-stats-row { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; }
+  .cc-stats-row .item { min-width: 70px; }
+  .cc-stats-row .item .v { font-size: 17px; font-weight: 700; }
+  .cc-stats-row .item .l { font-size: 11.5px; color: var(--cc-text-muted); }
+
+  .cc-chart-wrap { position: relative; height: 260px; }
+
+  .cc-request-card { margin-bottom:16px; border-left:4px solid var(--cc-primary); }
+  .cc-request-card.active { border-left-color: var(--cc-danger); box-shadow:0 0 0 3px var(--cc-danger-bg); }
+  .cc-request-icon { width:46px;height:46px;border-radius:12px;background:var(--cc-surface-alt);display:flex;align-items:center;justify-content:center;font-size:24px; }
+  .cc-request-title { font-size:17px;font-weight:800; }
+  .cc-request-sub { font-size:13px;color:var(--cc-text-muted);margin-top:4px; }
+  .cc-request-actions { display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px; }
+  .cc-request-history { margin-top:12px;font-size:12px;color:var(--cc-text-muted); }
+
+  @media (max-width: 760px) {
+    .cc-mon-topbar { padding: 12px 14px; }
+    .cc-mon-content { padding: 16px 12px 50px 12px; }
+    .cc-vital-value { font-size: 28px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cc-mon-topbar">
+  <div class="cc-mon-id">
+    <div class="dot">🧑‍⚕️</div>
+    <div>
+      <div style="font-weight:800; font-size:15.5px;" id="patientNameEl">Loading patient…</div>
+      <div class="cc-muted" style="font-size:12.5px;" id="patientMetaEl">Patient ID: {{ patient_id }}</div>
+    </div>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+    <span class="cc-badge cc-badge-muted" id="deviceStatusBadge">Checking device…</span>
+    <span class="cc-live-pill" id="livePill"><span class="blink"></span> LIVE MONITORING</span>
+    <button class="cc-mode-pill live" id="modeToggle" onclick="ccToggleDemoMode()">LIVE API MODE</button>
+    <button class="cc-icon-btn" onclick="ccToggleTheme()" title="Toggle dark mode"><span id="cc-theme-icon">🌙</span></button>
+    <button class="cc-btn cc-btn-outline cc-btn-sm" onclick="history.back()">Back</button>
+  </div>
+</div>
+
+<div class="cc-mon-content">
+
+  <div class="cc-emergency-banner" id="emergencyBanner">
+    <div class="icon">🚨</div>
+    <div>
+      <div class="title">PATIENT NEEDS ASSISTANCE</div>
+      <div class="sub" id="emergencySub">Emergency button pressed — please respond immediately.</div>
+    </div>
+  </div>
+
+  <div class="cc-card cc-request-card" id="requestCard">
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div class="cc-request-icon" id="requestIcon">🟢</div>
+      <div style="flex:1;">
+        <div class="cc-request-title" id="requestTitle">Patient communication system ready</div>
+        <div class="cc-request-sub" id="requestSub">MPU6050 movement communication and push-button requests are available.</div>
+      </div>
+      <span class="cc-badge cc-badge-muted" id="requestSource">READY</span>
+    </div>
+    <div class="cc-request-actions">
+      <button class="cc-btn cc-btn-outline cc-btn-sm" id="ackRequestBtn" style="display:none;" onclick="acknowledgeCurrentRequest()">Acknowledge</button>
+      <span class="cc-request-history" id="requestTime"></span>
+    </div>
+  </div>
+
+  <div class="cc-grid cc-grid-2" style="margin-bottom:16px;">
+
+    <div class="cc-card cc-vital-card" id="tempCard">
+      <div class="cc-vital-label">
+        <div><span style="font-size:15px;">🌡️</span> <strong>Temperature</strong></div>
+        <span class="cc-badge cc-badge-success" id="tempStatusBadge">NORMAL</span>
+      </div>
+      <div class="cc-vital-value" id="tempValue">-- °C</div>
+      <div class="cc-vital-updated" id="tempUpdated">Waiting for data…</div>
+      <div class="cc-stats-row">
+        <div class="item"><div class="v" id="statMin">--</div><div class="l">Min °C</div></div>
+        <div class="item"><div class="v" id="statMax">--</div><div class="l">Max °C</div></div>
+        <div class="item"><div class="v" id="statAvg">--</div><div class="l">Avg °C</div></div>
+      </div>
+    </div>
+
+    <div class="cc-card cc-vital-card">
+      <div class="cc-vital-label">
+        <div><span style="font-size:15px;">🏃</span> <strong>Movement (MPU6050)</strong></div>
+        <span class="cc-badge cc-badge-success" id="movementStatusBadge">NORMAL</span>
+      </div>
+      <div class="cc-axis-row">
+        <div class="cc-axis">
+          <div class="cc-axis-label">X</div>
+          <div class="cc-axis-bar-track"><div class="cc-axis-bar-fill" id="axBar" style="width:10%;"></div></div>
+          <div class="cc-axis-value" id="axVal">0.000</div>
+        </div>
+        <div class="cc-axis">
+          <div class="cc-axis-label">Y</div>
+          <div class="cc-axis-bar-track"><div class="cc-axis-bar-fill" id="ayBar" style="width:10%;"></div></div>
+          <div class="cc-axis-value" id="ayVal">0.000</div>
+        </div>
+        <div class="cc-axis">
+          <div class="cc-axis-label">Z</div>
+          <div class="cc-axis-bar-track"><div class="cc-axis-bar-fill" id="azBar" style="width:10%;"></div></div>
+          <div class="cc-axis-value" id="azVal">0.000</div>
+        </div>
+      </div>
+      <div class="cc-vital-updated" id="commStatusLine">Communication status: --</div>
+    </div>
+  </div>
+
+  <div class="cc-card" style="margin-bottom:16px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <div class="cc-section-title" style="margin:0;">📊 Temperature History</div>
+      <span class="cc-muted" style="font-size:12px;">High-temperature threshold: 38.0 °C</span>
+    </div>
+    <div class="cc-chart-wrap"><canvas id="tempChart"></canvas></div>
+  </div>
+
+  <div class="cc-card" id="deviceStatusCard">
+    <div class="cc-section-title">📡 Device Status</div>
+    <div class="cc-grid cc-grid-4" style="gap:14px;">
+      <div><div class="cc-muted" style="font-size:12px;">Connection</div><div style="font-weight:700;" id="devConn">--</div></div>
+      <div><div class="cc-muted" style="font-size:12px;">Last Data Received</div><div style="font-weight:700;" id="devLastSeen">--</div></div>
+      <div><div class="cc-muted" style="font-size:12px;">Last Temperature</div><div style="font-weight:700;" id="devLastTemp">--</div></div>
+      <div><div class="cc-muted" style="font-size:12px;">Last Movement</div><div style="font-weight:700;" id="devLastMove">--</div></div>
+    </div>
+  </div>
+
+  <div id="statusLine" class="cc-loading">Loading patient data…</div>
+
+</div>
+
+<script src="/static/js/app.js"></script>
+<script>
+const patientId = "{{ patient_id }}";
+const POLL_MS = {{ POLL_INTERVAL_MS|default:3000 }};
+let demoMode = false;
+let chart;
+let ackShownFor = null;
+
+function ccToggleDemoMode() {
+  demoMode = !demoMode;
+  const btn = document.getElementById('modeToggle');
+  btn.textContent = demoMode ? 'DEMO MODE' : 'LIVE API MODE';
+  btn.classList.toggle('demo', demoMode);
+  btn.classList.toggle('live', !demoMode);
+}
+
+function setText(id, text) { document.getElementById(id).textContent = text; }
+
+let currentRequestAlertId = null;
+
+function renderPatientRequest(data) {
+  const latest = data.latest;
+  const card = document.getElementById('requestCard');
+  const icon = document.getElementById('requestIcon');
+  const title = document.getElementById('requestTitle');
+  const sub = document.getElementById('requestSub');
+  const source = document.getElementById('requestSource');
+  const ack = document.getElementById('ackRequestBtn');
+  const time = document.getElementById('requestTime');
+
+  let req = latest ? (latest.patient_request || 'NONE') : 'NONE';
+  const movement = latest ? (latest.movement_request || 'NONE') : 'NONE';
+
+  const map = {
+    EMERGENCY: ['🚨','EMERGENCY REQUEST','Patient needs immediate assistance.','BUTTON / SYSTEM','danger'],
+    WATER: ['💧','WATER REQUEST','Patient is requesting water.','PUSH BUTTON','info'],
+    FOOD: ['🍽️','FOOD REQUEST','Patient is requesting food.','PUSH BUTTON','info'],
+    MEDICINE: ['💊','MEDICINE REQUEST','Patient is requesting medicine.','PUSH BUTTON','warning']
+  };
+
+  if (req !== 'NONE' && map[req]) {
+    const x = map[req];
+    icon.textContent=x[0]; title.textContent=x[1]; sub.textContent=x[2];
+    source.textContent=x[3]; source.className='cc-badge ' + (x[4]==='danger'?'cc-badge-danger':x[4]==='warning'?'cc-badge-warning':'cc-badge-info');
+    card.classList.toggle('active', req==='EMERGENCY');
+    ack.style.display='inline-flex';
+    time.textContent='Received: ' + (latest.time || '--');
+  } else if (movement !== 'NONE') {
+    const labels={FOOD:['🍽️','FOOD REQUEST','MPU6050 movement communication detected.'],WATER:['💧','WATER REQUEST','MPU6050 movement communication detected.'],EMERGENCY:['🚨','EMERGENCY REQUEST','MPU6050 movement communication detected.'],SLEEP:['🛏️','SLEEP / POSITION REQUEST','MPU6050 movement communication detected.']};
+    const x=labels[movement] || ['📐','MOVEMENT REQUEST','Movement communication detected.'];
+    icon.textContent=x[0]; title.textContent=x[1]; sub.textContent=x[2];
+    source.textContent='MPU6050'; source.className='cc-badge cc-badge-info';
+    card.classList.toggle('active', movement==='EMERGENCY');
+    ack.style.display='none'; time.textContent='Detected: ' + (latest.time || '--');
+  } else {
+    icon.textContent='🟢'; title.textContent='Patient communication system ready';
+    sub.textContent='MPU6050 movement communication and push-button requests are available.';
+    source.textContent='READY'; source.className='cc-badge cc-badge-muted';
+    card.classList.remove('active'); ack.style.display='none'; time.textContent='';
+  }
+}
+
+function acknowledgeCurrentRequest(){
+  const btn=document.getElementById('ackRequestBtn');
+  btn.disabled=true;
+  btn.textContent='Acknowledged';
+  document.getElementById('requestCard').classList.remove('active');
+}
+
+function renderLatest(data) {
+  const statusLine = document.getElementById('statusLine');
+  statusLine.style.display = 'none';
+
+  setText('patientNameEl', data.patient.name + (data.demo ? ' (Demo)' : ''));
+  setText('patientMetaEl', `Patient ID: ${data.patient.id || patientId}${data.patient.age ? ' · Age ' + data.patient.age : ''}`);
+
+  const badge = document.getElementById('deviceStatusBadge');
+  if (data.device_status === 'CONNECTED') {
+    badge.textContent = 'DEVICE CONNECTED';
+    badge.className = 'cc-badge cc-badge-success';
+  } else {
+    badge.textContent = 'DEVICE OFFLINE';
+    badge.className = 'cc-badge cc-badge-danger';
+  }
+
+  renderPatientRequest(data);
+
+  const emergencyBanner = document.getElementById('emergencyBanner');
+  if (data.latest && data.latest.emergency) {
+    emergencyBanner.classList.add('show');
+    setText('emergencySub', `${data.patient.name} · Patient ID ${data.patient.id || patientId} · ${data.latest.time}`);
+  } else {
+    emergencyBanner.classList.remove('show');
+  }
+
+  const tempCard = document.getElementById('tempCard');
+  const tempBadge = document.getElementById('tempStatusBadge');
+  if (data.latest) {
+    setText('tempValue', `${data.latest.temperature.toFixed(1)} °C`);
+    setText('tempUpdated', `Last updated: ${data.latest.time}`);
+    if (data.latest.high_temperature) {
+      tempBadge.textContent = 'HIGH TEMPERATURE ALERT';
+      tempBadge.className = 'cc-badge cc-badge-danger';
+      tempCard.classList.add('alert');
+    } else {
+      tempBadge.textContent = 'NORMAL';
+      tempBadge.className = 'cc-badge cc-badge-success';
+      tempCard.classList.remove('alert');
+    }
+
+    const mv = document.getElementById('movementStatusBadge');
+    if (data.latest.movement_status === 'MOVEMENT_DETECTED') {
+      mv.textContent = 'MOVEMENT DETECTED';
+      mv.className = 'cc-badge cc-badge-info';
+    } else {
+      mv.textContent = 'NORMAL';
+      mv.className = 'cc-badge cc-badge-success';
+    }
+
+    setText('axVal', data.latest.accel_x.toFixed(3));
+    setText('ayVal', data.latest.accel_y.toFixed(3));
+    setText('azVal', data.latest.accel_z.toFixed(3));
+    document.getElementById('axBar').style.width = Math.min(100, Math.abs(data.latest.accel_x) * 60 + 8) + '%';
+    document.getElementById('ayBar').style.width = Math.min(100, Math.abs(data.latest.accel_y) * 60 + 8) + '%';
+    document.getElementById('azBar').style.width = Math.min(100, Math.abs(data.latest.accel_z) * 60 + 8) + '%';
+
+    setText('commStatusLine', `Communication status: ${data.latest.status}`);
+    setText('devLastTemp', `${data.latest.temperature.toFixed(1)} °C`);
+    setText('devLastMove', data.latest.movement_status.replace('_', ' '));
+  } else {
+    setText('tempValue', '--');
+    setText('tempUpdated', 'No sensor data available.');
+  }
+
+  if (data.temperature_stats) {
+    setText('statMin', data.temperature_stats.min.toFixed ? data.temperature_stats.min.toFixed(1) : data.temperature_stats.min);
+    setText('statMax', data.temperature_stats.max.toFixed ? data.temperature_stats.max.toFixed(1) : data.temperature_stats.max);
+    setText('statAvg', data.temperature_stats.avg);
+  }
+
+  setText('devConn', data.device_status === 'CONNECTED' ? 'CONNECTED' : 'DISCONNECTED');
+  setText('devLastSeen', data.last_seen || '--');
+}
+
+function renderChart(points) {
+  const labels = points.map(p => p.time);
+  const temps = points.map(p => p.temp);
+  const pointColors = points.map(p => p.high_temperature ? '#dc2626' : '#0e7490');
+
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById('tempChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Temperature (°C)',
+          data: temps,
+          borderColor: '#0e7490',
+          backgroundColor: 'rgba(14,116,144,0.08)',
+          pointBackgroundColor: pointColors,
+          pointRadius: 3,
+          tension: 0.3,
+          fill: true,
+        },
+        {
+          label: 'High-temperature threshold',
+          data: labels.map(() => 38),
+          borderColor: '#dc2626',
+          borderDash: [6, 5],
+          pointRadius: 0,
+          borderWidth: 1.5,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { y: { min: 35, max: 40, ticks: { stepSize: 1 } } },
+      plugins: { legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } } }
+    }
+  });
+}
+
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Request failed: ' + res.status);
+  return res.json();
+}
+
+async function pollLatest() {
+  if (demoMode) {
+    renderLatest(ccGenerateDemoReading('Demo Patient'));
+    return;
+  }
+  try {
+    const data = await fetchJSON(ccApi(`/api/patient/${patientId}/latest/`));
+    renderLatest(data);
+  } catch (e) {
+    document.getElementById('statusLine').style.display = 'block';
+    document.getElementById('statusLine').className = 'cc-error';
+    document.getElementById('statusLine').textContent = 'Unable to connect to monitoring server.';
+    const badge = document.getElementById('deviceStatusBadge');
+    badge.textContent = 'DEVICE OFFLINE';
+    badge.className = 'cc-badge cc-badge-danger';
+  }
+}
+
+async function pollHistory() {
+  if (demoMode) {
+    renderChart(ccGenerateDemoHistory(20));
+    return;
+  }
+  try {
+    const data = await fetchJSON(ccApi(`/api/patient/${patientId}/?limit=30`));
+    renderChart(data);
+  } catch (e) {
+    // chart just stays as-is; the top-level error message already covers this
+  }
+}
+
+function tick() {
+  pollLatest();
+  pollHistory();
+}
+
+tick();
+setInterval(tick, POLL_MS);
+</script>
+
+</body>
+</html>

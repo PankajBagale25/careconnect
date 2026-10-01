@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}CareConnect | Patient Profile{% endblock %}
+{% block page_title %}Patient Profile{% endblock %}
+{% block nav_patients %}active{% endblock %}
+{% block extra_head %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endblock %}
+
+{% block content %}
+<div id="profileWrap" class="cc-loading">Loading patient data…</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const patientId = "{{ patient_id }}";
+const doctorId = "{{ doctor_id }}";
+
+function deviceBadge(status) {
+  return status === 'CONNECTED'
+    ? '<span class="cc-badge cc-badge-success">Connected</span>'
+    : '<span class="cc-badge cc-badge-danger">Offline</span>';
+}
+
+function severityBadge(sev) {
+  if (sev === 'CRITICAL') return '<span class="cc-badge cc-badge-danger">Critical</span>';
+  if (sev === 'WARNING') return '<span class="cc-badge cc-badge-warning">Warning</span>';
+  return '<span class="cc-badge cc-badge-info">Information</span>';
+}
+
+async function loadProfile() {
+  const wrap = document.getElementById('profileWrap');
+  try {
+    const res = await fetch(ccApi(`/api/patient/${patientId}/profile/`));
+    const d = await res.json();
+    if (d.error) { wrap.className = 'cc-error'; wrap.textContent = d.error; return; }
+
+    let alertsHtml = '<div class="cc-empty">No alerts recorded.</div>';
+    if (d.alerts.length) {
+      alertsHtml = `<table class="cc-table"><thead><tr><th>Type</th><th>Value</th><th>Date</th><th>Time</th><th>Severity</th><th>Status</th></tr></thead><tbody>`;
+      d.alerts.forEach(a => {
+        alertsHtml += `<tr><td>${a.type_display}</td><td>${a.value || '-'}</td><td>${a.date}</td><td>${a.time}</td><td>${severityBadge(a.severity)}</td><td>${a.acknowledged ? '<span class="cc-badge cc-badge-muted">Acknowledged</span>' : '<span class="cc-badge cc-badge-danger">Open</span>'}</td></tr>`;
+      });
+      alertsHtml += `</tbody></table>`;
+    }
+
+    wrap.className = '';
+    wrap.innerHTML = `
+      <div class="cc-card" style="margin-bottom:16px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="font-size:19px; font-weight:800;">${d.patient.name}</div>
+            <div class="cc-muted" style="font-size:13px;">Patient ID #${d.patient.id} · Age ${d.patient.age ?? '-'} · ${d.patient.gender ? d.patient.gender.charAt(0).toUpperCase() + d.patient.gender.slice(1) : 'Gender not specified'}</div>
+          </div>
+          <button class="cc-btn cc-btn-primary cc-btn-sm" onclick="window.location.href='/dashboard/?id=${d.patient.id}'">Open Live Monitoring</button>
+        </div>
+      </div>
+
+      <div class="cc-grid cc-grid-2" style="margin-bottom:16px;">
+        <div class="cc-card">
+          <div class="cc-section-title">Contact & Care</div>
+          <p><strong>Phone:</strong> ${d.patient.phone || '-'}</p>
+          <p><strong>Assigned Doctor:</strong> ${d.patient.doctor_name}</p>
+          <p><strong>Device ID:</strong> ${d.patient.device_id || '-'}</p>
+          <p><strong>Medical Notes:</strong> ${d.patient.medical_notes || 'None recorded'}</p>
+        </div>
+        <div class="cc-card">
+          <div class="cc-section-title">Device Status</div>
+          <p><strong>Connection:</strong> ${deviceBadge(d.device_status)}</p>
+          <p><strong>Last Data Received:</strong> ${d.last_seen || '-'}</p>
+        </div>
+      </div>
+
+      <div class="cc-card" style="margin-bottom:16px;">
+        <div class="cc-section-title">Temperature History</div>
+        <div class="cc-chart-wrap" style="height:220px; position:relative;"><canvas id="profChart"></canvas></div>
+      </div>
+
+      <div class="cc-card">
+        <div class="cc-section-title">Alert History</div>
+        ${alertsHtml}
+      </div>
+    `;
+
+    const labels = d.temperature_history.map(p => p.time);
+    const temps = d.temperature_history.map(p => p.temp);
+    new Chart(document.getElementById('profChart'), {
+      type: 'line',
+      data: { labels, datasets: [{ label: 'Temperature (°C)', data: temps, borderColor: '#0e7490', backgroundColor: 'rgba(14,116,144,0.08)', fill: true, tension: 0.3, pointRadius: 2 }] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 34, max: 40 } } }
+    });
+
+  } catch (e) {
+    wrap.className = 'cc-error';
+    wrap.textContent = 'Unable to connect to monitoring server.';
+  }
+}
+
+loadProfile();
+</script>
+{% endblock %}

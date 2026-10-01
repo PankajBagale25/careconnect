@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}CareConnect | Doctor Dashboard{% endblock %}
+{% block page_title %}Doctor Dashboard{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+
+{% block content %}
+<div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:18px;">
+  <div>
+    <div style="font-size:20px; font-weight:800;">Welcome back 👋</div>
+    <div class="cc-muted" style="font-size:13.5px;">Here's what's happening with your patients today.</div>
+  </div>
+  <button class="cc-btn cc-btn-primary" onclick="toggleForm()">➕ Add Patient</button>
+</div>
+
+<div class="cc-grid cc-grid-4" style="margin-bottom:20px;" id="overviewCards">
+  <div class="cc-card cc-stat-card">
+    <div class="cc-stat-icon" style="background:var(--cc-info-bg); color:var(--cc-info);">🧑‍🤝‍🧑</div>
+    <div class="cc-stat-value" id="statTotal">--</div>
+    <div class="cc-stat-label">Total Patients</div>
+  </div>
+  <div class="cc-card cc-stat-card">
+    <div class="cc-stat-icon" style="background:var(--cc-success-bg); color:var(--cc-success);">✅</div>
+    <div class="cc-stat-value" id="statActive">--</div>
+    <div class="cc-stat-label">Active Patients</div>
+  </div>
+  <div class="cc-card cc-stat-card">
+    <div class="cc-stat-icon" style="background:var(--cc-danger-bg); color:var(--cc-danger);">⚠️</div>
+    <div class="cc-stat-value" id="statAttention">--</div>
+    <div class="cc-stat-label">Requiring Attention</div>
+  </div>
+  <div class="cc-card cc-stat-card">
+    <div class="cc-stat-icon" style="background:var(--cc-primary-light); color:var(--cc-primary-dark);">📡</div>
+    <div class="cc-stat-value" id="statDevices">--</div>
+    <div class="cc-stat-label">Connected IoT Devices</div>
+  </div>
+</div>
+
+<div class="cc-card" id="formBox" style="display:none; margin-bottom:20px;">
+  <div class="cc-section-title">Add Patient</div>
+  <div class="cc-grid cc-grid-3">
+    <div class="cc-field"><label class="cc-label">Full Name</label><input class="cc-input" id="name" placeholder="e.g. Ramesh Kumar"></div>
+    <div class="cc-field"><label class="cc-label">Age</label><input class="cc-input" id="age" type="number" placeholder="e.g. 58"></div>
+    <div class="cc-field">
+      <label class="cc-label">Gender</label>
+      <select class="cc-select" id="gender">
+        <option value="">Not specified</option>
+        <option value="male">Male</option>
+        <option value="female">Female</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="cc-field"><label class="cc-label">Phone</label><input class="cc-input" id="phone" placeholder="e.g. 9876543210"></div>
+    <div class="cc-field"><label class="cc-label">ESP32 Device ID</label><input class="cc-input" id="device_id" placeholder="e.g. ESP32-01"></div>
+    <div class="cc-field"><label class="cc-label">Medical Notes (optional)</label><input class="cc-input" id="medical_notes" placeholder="Optional"></div>
+  </div>
+  <button class="cc-btn cc-btn-primary" onclick="addPatient()">Save Patient</button>
+  <button class="cc-btn cc-btn-outline" onclick="toggleForm()">Cancel</button>
+</div>
+
+<div class="cc-card" id="monitoring">
+  <div class="cc-section-title">Patients</div>
+  <div id="patientsWrap" class="cc-loading">Loading patient data…</div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const doctorId = "{{ doctor_id }}";
+const POLL_MS = {{ POLL_INTERVAL_MS|default:5000 }};
+
+function toggleForm() {
+  const f = document.getElementById("formBox");
+  f.style.display = (f.style.display === "none" || !f.style.display) ? "block" : "none";
+}
+
+function badgeForDevice(status) {
+  return status === "CONNECTED"
+    ? '<span class="cc-badge cc-badge-success">Connected</span>'
+    : '<span class="cc-badge cc-badge-danger">Offline</span>';
+}
+
+function badgeForAlert(hasAlert) {
+  return hasAlert
+    ? '<span class="cc-badge cc-badge-danger">Attention</span>'
+    : '<span class="cc-badge cc-badge-success">Stable</span>';
+}
+
+async function loadOverview() {
+  try {
+    const res = await fetch(ccApi(`/api/doctor-overview/${doctorId}/`));
+    const d = await res.json();
+    document.getElementById('statTotal').textContent = d.total_patients;
+    document.getElementById('statActive').textContent = d.active_patients;
+    document.getElementById('statAttention').textContent = d.attention_required;
+    document.getElementById('statDevices').textContent = d.connected_devices;
+  } catch (e) { /* leave dashes */ }
+}
+
+async function loadPatients() {
+  const wrap = document.getElementById('patientsWrap');
+  try {
+    const res = await fetch(ccApi(`/api/doctor-patients/${doctorId}/`));
+    const data = await res.json();
+
+    if (!data.length) {
+      wrap.className = 'cc-empty';
+      wrap.textContent = 'No patients yet — add your first patient to get started.';
+      return;
+    }
+
+    let html = `<table class="cc-table"><thead><tr>
+      <th>Patient</th><th>Age</th><th>Gender</th><th>Device</th>
+      <th>Latest Temp</th><th>Condition</th><th>Last Update</th><th>Status</th><th></th>
+    </tr></thead><tbody>`;
+
+    data.forEach(p => {
+      html += `<tr>
+        <td><strong>${p.name}</strong><div class="cc-muted" style="font-size:11.5px;">ID #${p.id}</div></td>
+        <td>${p.age ?? '-'}</td>
+        <td>${p.gender ? p.gender.charAt(0).toUpperCase() + p.gender.slice(1) : '-'}</td>
+        <td>${badgeForDevice(p.device_status)}</td>
+        <td>${p.latest_temperature != null ? p.latest_temperature.toFixed(1) + ' °C' : '-'}</td>
+        <td>${p.condition ? p.condition.replace('_', ' ') : '-'}</td>
+        <td>${p.last_update || '-'}</td>
+        <td>${badgeForAlert(p.has_alert)}</td>
+        <td style="display:flex; gap:6px;">
+          <button class="cc-btn cc-btn-primary cc-btn-sm" onclick="openPatient(${p.id})">Open Monitoring</button>
+          <button class="cc-btn cc-btn-outline cc-btn-sm" onclick="openProfile(${p.id})">Profile</button>
+        </td>
+      </tr>`;
+    });
+
+    html += `</tbody></table>`;
+    wrap.className = '';
+    wrap.innerHTML = html;
+  } catch (e) {
+    wrap.className = 'cc-error';
+    wrap.textContent = 'Unable to connect to monitoring server.';
+  }
+}
+
+async function addPatient() {
+  const name = document.getElementById("name").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+  if (!name || !phone) { alert("Name and phone are required."); return; }
+
+  try {
+    const res = await fetch(ccApi('/api/add-patient/'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        doctor_id: doctorId,
+        name,
+        age: document.getElementById("age").value,
+        gender: document.getElementById("gender").value,
+        phone,
+        device_id: document.getElementById("device_id").value,
+        medical_notes: document.getElementById("medical_notes").value,
+      })
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    toggleForm();
+    loadPatients();
+    loadOverview();
+  } catch (e) {
+    alert("Unable to connect to monitoring server.");
+  }
+}
+
+function openPatient(id) {
+  window.location.href = `/dashboard/?id=${id}`;
+}
+
+function openProfile(id) {
+  window.location.href = `/patient-profile/?id=${id}&doctor_id=${doctorId}`;
+}
+
+loadOverview();
+loadPatients();
+setInterval(() => { loadOverview(); loadPatients(); }, POLL_MS);
+</script>
+{% endblock %}

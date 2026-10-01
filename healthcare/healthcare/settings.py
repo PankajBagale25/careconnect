@@ -3,28 +3,47 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load variables from a .env file (if present) into the environment.
-# Copy .env.example to .env and fill in real values — see README.md.
+# Load variables from a .env file (if present)
 try:
     from dotenv import load_dotenv
     load_dotenv(BASE_DIR / '.env')
 except ImportError:
     pass
 
-# ✅ SECURITY: read from environment instead of hard-coding.
-# Set these in a .env file or your host's environment settings — see README.
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-dev-only-change-me')
 
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+# ============================================================
+# SECURITY
+# ============================================================
 
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY',
+    'django-insecure-dev-only-change-me'
+)
 
-# A device with no reading in this many seconds is shown as DISCONNECTED on the dashboard.
-DEVICE_OFFLINE_SECONDS = int(os.environ.get('DEVICE_OFFLINE_SECONDS', '30'))
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
-# Exposed to templates so the frontend polling interval is configurable without a code change.
-FRONTEND_POLL_INTERVAL_MS = int(os.environ.get('FRONTEND_POLL_INTERVAL_MS', '3000'))
+ALLOWED_HOSTS = os.environ.get(
+    'DJANGO_ALLOWED_HOSTS',
+    '*'
+).split(',')
 
+
+# ============================================================
+# APPLICATION SETTINGS
+# ============================================================
+
+DEVICE_OFFLINE_SECONDS = int(
+    os.environ.get('DEVICE_OFFLINE_SECONDS', '30')
+)
+
+FRONTEND_POLL_INTERVAL_MS = int(
+    os.environ.get('FRONTEND_POLL_INTERVAL_MS', '3000')
+)
+
+
+# ============================================================
+# INSTALLED APPS
+# ============================================================
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -34,30 +53,53 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    'rest_framework',   # ✅ IMPORTANT
+    'rest_framework',
     'monitoring',
 ]
 
 
+# ============================================================
+# MIDDLEWARE
+# ============================================================
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+
+    # WhiteNoise for production static files
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',  # ✅ KEEP THIS
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
 
+# ============================================================
+# URL / WSGI
+# ============================================================
+
 ROOT_URLCONF = 'healthcare.urls'
 
+WSGI_APPLICATION = 'healthcare.wsgi.application'
+
+
+# ============================================================
+# TEMPLATES
+# ============================================================
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],  # ✅ GLOBAL TEMPLATES
+
+        'DIRS': [
+            os.path.join(BASE_DIR, 'templates')
+        ],
+
         'APP_DIRS': True,
+
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
@@ -70,33 +112,60 @@ TEMPLATES = [
 ]
 
 
-WSGI_APPLICATION = 'healthcare.wsgi.application'
+# ============================================================
+# DATABASE
+# ============================================================
 
+import dj_database_url
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': dj_database_url.config(
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
 
 
+# ============================================================
+# LANGUAGE / TIMEZONE
+# ============================================================
+
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'Asia/Kolkata'   # ✅ INDIA TIME
+
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
+
 USE_TZ = True
 
 
+# ============================================================
+# STATIC FILES
+# ============================================================
+
 STATIC_URL = 'static/'
+
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static')
 ]
 
+# Required for collectstatic on Render
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+
+# ============================================================
+# CSRF
+# ============================================================
 
 CSRF_TRUSTED_ORIGINS = os.environ.get(
-    'DJANGO_CSRF_TRUSTED_ORIGINS', 'http://127.0.0.1:8000'
+    'DJANGO_CSRF_TRUSTED_ORIGINS',
+    'http://127.0.0.1:8000'
 ).split(',')
 
+
+# ============================================================
+# DEFAULT PRIMARY KEY
+# ============================================================
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
